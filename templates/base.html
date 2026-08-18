@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#12d7d5">
+  <title>{% block title %}Notas Fiscais | Favela Llog{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}">
+        <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Favela Llog">
+      </a>
+      {% if session.get('admin') %}
+      <form method="post" action="{{ url_for('admin_logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="ghost-btn" type="submit">Sair</button>
+      </form>
+      {% else %}
+      <a class="admin-link" href="{{ url_for('admin_login') }}">Área administrativa</a>
+      {% endif %}
+    </header>
+    <main>{% block content %}{% endblock %}</main>
+    <footer>Favela Llog · Gestão de notas fiscais</footer>
+  </div>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>
+

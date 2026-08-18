@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: notas-fiscais-favela-llog
+    runtime: python
+    region: ohio
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.7
+      - key: SUPABASE_URL
+        value: https://qvmluieljxpgdqeboiej.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: ADMIN_USERNAME
+        value: piveta
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+

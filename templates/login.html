@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Acesso administrativo | Favela Llog{% endblock %}
+{% block content %}
+<section class="center-panel"><div class="card login-card">
+  <span class="eyebrow">ACESSO RESTRITO</span><h1>Área administrativa</h1><p>Entre para consultar e baixar as notas enviadas.</p>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Usuário<input name="username" autocomplete="username" required autofocus></label>
+    <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary-btn" type="submit">Entrar <span>→</span></button>
+  </form>
+</div></section>
+{% endblock %}
+

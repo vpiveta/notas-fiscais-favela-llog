@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-grid">
+  <div class="hero-copy">
+    <span class="eyebrow">ENVIO DIGITAL</span>
+    <h1>Sua nota fiscal,<br><em>sem complicação.</em></h1>
+    <p>Preencha seus dados, escolha a quinzena e envie o PDF. Não é necessário login.</p>
+    <div class="trust"><span>✓</span> Arquivo protegido e disponível apenas para a administração</div>
+  </div>
+  <div class="card form-card">
+    <div class="card-head">
+      <span class="step">01</span>
+      <div><h2>Enviar nota fiscal</h2><p>Todos os campos são obrigatórios</p></div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('upload_invoice') }}" enctype="multipart/form-data" id="upload-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Nome completo<input name="full_name" maxlength="160" autocomplete="name" placeholder="Digite seu nome completo" required></label>
+      <label>CPF<input name="cpf" id="cpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required></label>
+      <fieldset><legend>Quinzena</legend><div class="choices">
+        <label class="choice"><input type="radio" name="fortnight" value="1" required><span><b>1ª quinzena</b><small>Dias 01 a 15</small></span></label>
+        <label class="choice"><input type="radio" name="fortnight" value="2" required><span><b>2ª quinzena</b><small>Dias 16 ao fim</small></span></label>
+      </div></fieldset>
+      <label class="dropzone" id="dropzone">
+        <input type="file" name="pdf" id="pdf" accept="application/pdf,.pdf" required>
+        <span class="upload-icon">⇧</span><b id="file-label">Selecionar nota fiscal em PDF</b><small>Máximo de 10 MB</small>
+      </label>
+      <button class="primary-btn" type="submit" id="submit-btn">Enviar nota fiscal <span>→</span></button>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
