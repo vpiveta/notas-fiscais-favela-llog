@@ -6,6 +6,7 @@ import unicodedata
 from datetime import datetime
 from functools import wraps
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import requests
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for, Response
@@ -15,6 +16,7 @@ from werkzeug.utils import secure_filename
 
 MAX_FILE_SIZE = 25 * 1024 * 1024
 BUCKET = "notas-fiscais"
+SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 
 app = Flask(__name__)
 app.config.update(
@@ -50,6 +52,16 @@ def csrf_token():
 
 
 app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+@app.template_filter("br_datetime")
+def br_datetime(value):
+    if not value:
+        return "—"
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
+    return parsed.astimezone(SAO_PAULO).strftime("%d/%m/%Y · %H:%M")
 
 
 def verify_csrf():
@@ -131,7 +143,7 @@ def upload_invoice():
             flash(error, "error")
         return redirect(url_for("index"))
 
-    now = datetime.now()
+    now = datetime.now(SAO_PAULO)
     object_path = f"{now:%Y/%m}/q{fortnight}/{safe_stem(full_name)}-{uuid4().hex}.pdf"
     storage_url = f"{env('SUPABASE_URL')}/storage/v1/object/{BUCKET}/{object_path}"
     uploaded = requests.post(
