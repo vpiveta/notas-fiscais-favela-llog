@@ -5,7 +5,7 @@ Portal online para motoristas enviarem notas fiscais em PDF. O envio é público
 ## Recursos
 
 - Nome completo, CPF validado e seleção de 1ª/2ª quinzena.
-- Somente PDF, limite de 10 MB e validação do conteúdo.
+- Somente PDF, limite de 25 MB e validação do conteúdo.
 - PDFs em bucket privado do Supabase Storage.
 - Metadados no PostgreSQL com RLS e acesso público bloqueado.
 - Área administrativa com login, pesquisa, filtro e download.
