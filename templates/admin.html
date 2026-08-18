@@ -9,9 +9,8 @@
     <button class="primary-btn compact" type="submit">Filtrar</button><a class="ghost-btn compact" href="{{ url_for('admin_dashboard') }}">Limpar</a>
   </form>
   <div class="table-card"><div class="table-wrap"><table><thead><tr><th>Motorista</th><th>CPF</th><th>Quinzena</th><th>Enviado em</th><th>Arquivo</th><th></th></tr></thead><tbody>
-  {% for item in invoices %}<tr><td><strong>{{ item.full_name }}</strong></td><td class="cpf-cell">{{ item.cpf[:3] }}.{{ item.cpf[3:6] }}.{{ item.cpf[6:9] }}-{{ item.cpf[9:] }}</td><td><span class="pill">{{ item.fortnight }}ª quinzena</span></td><td>{{ item.created_at[:10].split('-')|reverse|join('/') }} · {{ item.created_at[11:16] }}</td><td>{{ item.original_filename }}<small>{{ (item.file_size_bytes / 1024)|round|int }} KB</small></td><td><a class="download-btn" href="{{ url_for('download_invoice', invoice_id=item.id) }}">Baixar PDF ↓</a></td></tr>
+  {% for item in invoices %}<tr><td><strong>{{ item.full_name }}</strong></td><td class="cpf-cell">{{ item.cpf[:3] }}.{{ item.cpf[3:6] }}.{{ item.cpf[6:9] }}-{{ item.cpf[9:] }}</td><td><span class="pill">{{ item.fortnight }}ª quinzena</span></td><td>{{ item.created_at|br_datetime }}</td><td>{{ item.original_filename }}<small>{{ (item.file_size_bytes / 1024)|round|int }} KB</small></td><td><a class="download-btn" href="{{ url_for('download_invoice', invoice_id=item.id) }}">Baixar PDF ↓</a></td></tr>
   {% else %}<tr><td colspan="6" class="empty">Nenhuma nota encontrada.</td></tr>{% endfor %}
   </tbody></table></div></div>
 </section>
 {% endblock %}
-
