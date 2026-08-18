@@ -13,7 +13,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
 
-MAX_FILE_SIZE = 10 * 1024 * 1024
+MAX_FILE_SIZE = 25 * 1024 * 1024
 BUCKET = "notas-fiscais"
 
 app = Flask(__name__)
@@ -122,7 +122,7 @@ def upload_invoice():
     if file and file.filename:
         content = file.read(MAX_FILE_SIZE + 1)
         if len(content) > MAX_FILE_SIZE:
-            errors.append("O PDF deve ter no máximo 10 MB.")
+            errors.append("O PDF deve ter no máximo 25 MB.")
         if not content.startswith(b"%PDF-"):
             errors.append("O arquivo enviado não é um PDF válido.")
 
@@ -256,10 +256,9 @@ def download_invoice(invoice_id):
 
 @app.errorhandler(413)
 def too_large(_error):
-    flash("O arquivo ultrapassa o limite de 10 MB.", "error")
+    flash("O arquivo ultrapassa o limite de 25 MB.", "error")
     return redirect(url_for("index"))
 
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=False)
-
