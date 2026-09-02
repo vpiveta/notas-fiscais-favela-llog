@@ -3,14 +3,24 @@
 {% block content %}
 <section class="admin-page">
   <div class="admin-title"><div><span class="eyebrow">PAINEL ADMINISTRATIVO</span><h1>Notas fiscais recebidas</h1></div><div class="total-card"><b>{{ invoices|length }}</b><span>registro(s)</span></div></div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}
+  {% endwith %}
   <form class="filters" method="get">
     <label>Buscar<input name="search" value="{{ search }}" placeholder="Nome ou CPF"></label>
+    <label>Mês<input type="month" name="month" value="{{ month }}"></label>
     <label>Quinzena<select name="fortnight"><option value="">Todas</option><option value="1" {% if fortnight=='1' %}selected{% endif %}>1ª quinzena</option><option value="2" {% if fortnight=='2' %}selected{% endif %}>2ª quinzena</option></select></label>
     <button class="primary-btn compact" type="submit">Filtrar</button><a class="ghost-btn compact" href="{{ url_for('admin_dashboard') }}">Limpar</a>
   </form>
-  <div class="table-card"><div class="table-wrap"><table><thead><tr><th>Motorista</th><th>CPF</th><th>Quinzena</th><th>Enviado em</th><th>Arquivo</th><th></th></tr></thead><tbody>
-  {% for item in invoices %}<tr><td><strong>{{ item.full_name }}</strong></td><td class="cpf-cell">{{ item.cpf[:3] }}.{{ item.cpf[3:6] }}.{{ item.cpf[6:9] }}-{{ item.cpf[9:] }}</td><td><span class="pill">{{ item.fortnight }}ª quinzena</span></td><td>{{ item.created_at|br_datetime }}</td><td>{{ item.original_filename }}<small>{{ (item.file_size_bytes / 1024)|round|int }} KB</small></td><td><a class="download-btn" href="{{ url_for('download_invoice', invoice_id=item.id) }}">Baixar PDF ↓</a></td></tr>
-  {% else %}<tr><td colspan="6" class="empty">Nenhuma nota encontrada.</td></tr>{% endfor %}
+  {% if month and fortnight in ['1','2'] %}
+  <div style="margin: 0 0 18px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <a class="primary-btn compact" href="{{ url_for('download_fortnight', month=month, fortnight=fortnight) }}">Baixar todas as notas da quinzena ↓</a>
+    <span><strong>{{ invoices|length }}</strong> nota(s) em {{ month[5:7] }}/{{ month[:4] }} · {{ fortnight }}ª quinzena</span>
+  </div>
+  {% endif %}
+  <div class="table-card"><div class="table-wrap"><table><thead><tr><th>Motorista</th><th>CPF</th><th>Mês</th><th>Quinzena</th><th>Enviado em</th><th>Arquivo</th><th></th></tr></thead><tbody>
+  {% for item in invoices %}<tr><td><strong>{{ item.full_name }}</strong></td><td class="cpf-cell">{{ item.cpf[:3] }}.{{ item.cpf[3:6] }}.{{ item.cpf[6:9] }}-{{ item.cpf[9:] }}</td><td>{{ item.invoice_month[5:7] }}/{{ item.invoice_month[:4] if item.invoice_month else '—' }}</td><td><span class="pill">{{ item.fortnight }}ª quinzena</span></td><td>{{ item.created_at|br_datetime }}</td><td>{{ item.original_filename }}<small>{{ (item.file_size_bytes / 1024)|round|int }} KB</small></td><td><a class="download-btn" href="{{ url_for('download_invoice', invoice_id=item.id) }}">Baixar PDF ↓</a></td></tr>
+  {% else %}<tr><td colspan="7" class="empty">Nenhuma nota encontrada.</td></tr>{% endfor %}
   </tbody></table></div></div>
 </section>
 {% endblock %}
