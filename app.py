@@ -5,6 +5,7 @@ import re
 import secrets
 import unicodedata
 import zipfile
+from collections import defaultdict
 from datetime import datetime
 from functools import wraps
 from uuid import uuid4
@@ -19,6 +20,11 @@ from werkzeug.utils import secure_filename
 MAX_FILE_SIZE = 25 * 1024 * 1024
 BUCKET = "notas-fiscais"
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
+MONTH_NAMES = {
+    "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril",
+    "05": "Maio", "06": "Junho", "07": "Julho", "08": "Agosto",
+    "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro",
+}
 
 app = Flask(__name__)
 app.config.update(
@@ -94,6 +100,13 @@ def valid_month(value):
     return bool(re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", value or ""))
 
 
+def month_label(value):
+    if not valid_month(value):
+        return value or "Sem mês"
+    year, month = value.split("-")
+    return f"{MONTH_NAMES.get(month, month)} {year}"
+
+
 def safe_stem(name):
     normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-zA-Z0-9]+", "-", normalized).strip("-").lower()[:60] or "motorista"
@@ -129,6 +142,26 @@ def fetch_invoices(month="", fortnight="", search="", limit="500"):
         app.logger.error("Falha na listagem: %s", response.text)
         abort(502, "Não foi possível consultar as notas.")
     return response.json()
+
+
+def build_period_cards(invoices):
+    grouped = defaultdict(int)
+    for item in invoices:
+        month = item.get("invoice_month") or ""
+        fortnight = str(item.get("fortnight") or "")
+        if valid_month(month) and fortnight in {"1", "2"}:
+            grouped[(month, fortnight)] += 1
+    cards = []
+    for (month, fortnight), count in grouped.items():
+        cards.append({
+            "month": month,
+            "fortnight": fortnight,
+            "month_label": month_label(month),
+            "label": f"{fortnight}ª quinzena de {month_label(month)}",
+            "count": count,
+        })
+    cards.sort(key=lambda item: (item["month"], item["fortnight"]), reverse=True)
+    return cards
 
 
 @app.get("/health")
@@ -254,8 +287,29 @@ def admin_dashboard():
     month = request.args.get("month", "").strip()
     fortnight = request.args.get("fortnight", "")
     search = request.args.get("search", "").strip()
-    invoices = fetch_invoices(month=month, fortnight=fortnight, search=search)
-    return render_template("admin.html", invoices=invoices, month=month, fortnight=fortnight, search=search)
+
+    all_invoices = fetch_invoices(limit="5000")
+    period_cards = build_period_cards(all_invoices)
+
+    if search or (valid_month(month) and fortnight in {"1", "2"}):
+        invoices = fetch_invoices(month=month, fortnight=fortnight, search=search, limit="1000")
+    else:
+        invoices = []
+
+    selected_label = ""
+    if valid_month(month) and fortnight in {"1", "2"}:
+        selected_label = f"{fortnight}ª quinzena de {month_label(month)}"
+
+    return render_template(
+        "admin.html",
+        invoices=invoices,
+        period_cards=period_cards,
+        month=month,
+        fortnight=fortnight,
+        search=search,
+        selected_label=selected_label,
+        total_invoices=len(all_invoices),
+    )
 
 
 @app.get("/admin/download/<uuid:invoice_id>")
@@ -290,12 +344,12 @@ def download_fortnight():
     month = request.args.get("month", "").strip()
     fortnight = request.args.get("fortnight", "")
     if not valid_month(month) or fortnight not in {"1", "2"}:
-        flash("Selecione o mês e a quinzena para baixar todas as notas.", "error")
-        return redirect(url_for("admin_dashboard", month=month, fortnight=fortnight))
+        flash("Selecione a quinzena que deseja baixar.", "error")
+        return redirect(url_for("admin_dashboard"))
 
     invoices = fetch_invoices(month=month, fortnight=fortnight, limit="1000")
     if not invoices:
-        flash("Nenhuma nota encontrada para o mês e quinzena selecionados.", "error")
+        flash("Nenhuma nota encontrada para a quinzena selecionada.", "error")
         return redirect(url_for("admin_dashboard", month=month, fortnight=fortnight))
 
     output = io.BytesIO()
