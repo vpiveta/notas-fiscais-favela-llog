@@ -1,8 +1,10 @@
 import hmac
+import io
 import os
 import re
 import secrets
 import unicodedata
+import zipfile
 from datetime import datetime
 from functools import wraps
 from uuid import uuid4
@@ -88,6 +90,10 @@ def valid_cpf(value):
     return True
 
 
+def valid_month(value):
+    return bool(re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", value or ""))
+
+
 def safe_stem(name):
     normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-zA-Z0-9]+", "-", normalized).strip("-").lower()[:60] or "motorista"
@@ -102,6 +108,29 @@ def admin_required(view):
     return wrapped
 
 
+def fetch_invoices(month="", fortnight="", search="", limit="500"):
+    params = {
+        "select": "id,full_name,cpf,invoice_month,fortnight,original_filename,storage_path,file_size_bytes,created_at",
+        "order": "created_at.desc",
+        "limit": limit,
+    }
+    if valid_month(month):
+        params["invoice_month"] = f"eq.{month}"
+    if fortnight in {"1", "2"}:
+        params["fortnight"] = f"eq.{fortnight}"
+    if search:
+        clean = search.replace(",", "").replace(".", "")[:80]
+        params["or"] = f"(full_name.ilike.*{clean}*,cpf.ilike.*{digits(clean)}*)"
+    response = requests.get(
+        f"{env('SUPABASE_URL')}/rest/v1/invoices",
+        headers=supabase_headers(), params=params, timeout=30,
+    )
+    if not response.ok:
+        app.logger.error("Falha na listagem: %s", response.text)
+        abort(502, "Não foi possível consultar as notas.")
+    return response.json()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -109,7 +138,8 @@ def health():
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    current_month = datetime.now(SAO_PAULO).strftime("%Y-%m")
+    return render_template("index.html", current_month=current_month)
 
 
 @app.post("/enviar")
@@ -117,6 +147,7 @@ def upload_invoice():
     verify_csrf()
     full_name = " ".join(request.form.get("full_name", "").split())
     cpf = digits(request.form.get("cpf"))
+    invoice_month = request.form.get("invoice_month", "").strip()
     fortnight = request.form.get("fortnight", "")
     file = request.files.get("pdf")
 
@@ -125,6 +156,8 @@ def upload_invoice():
         errors.append("Informe o nome completo.")
     if not valid_cpf(cpf):
         errors.append("Informe um CPF válido.")
+    if not valid_month(invoice_month):
+        errors.append("Selecione o mês da nota fiscal.")
     if fortnight not in {"1", "2"}:
         errors.append("Selecione a quinzena.")
     if not file or not file.filename:
@@ -143,8 +176,8 @@ def upload_invoice():
             flash(error, "error")
         return redirect(url_for("index"))
 
-    now = datetime.now(SAO_PAULO)
-    object_path = f"{now:%Y/%m}/q{fortnight}/{safe_stem(full_name)}-{uuid4().hex}.pdf"
+    year, month = invoice_month.split("-")
+    object_path = f"{year}/{month}/q{fortnight}/{safe_stem(full_name)}-{uuid4().hex}.pdf"
     storage_url = f"{env('SUPABASE_URL')}/storage/v1/object/{BUCKET}/{object_path}"
     uploaded = requests.post(
         storage_url,
@@ -161,6 +194,7 @@ def upload_invoice():
     record = {
         "full_name": full_name,
         "cpf": cpf,
+        "invoice_month": invoice_month,
         "fortnight": int(fortnight),
         "original_filename": original,
         "storage_path": object_path,
@@ -217,27 +251,11 @@ def admin_logout():
 @app.get("/admin")
 @admin_required
 def admin_dashboard():
+    month = request.args.get("month", "").strip()
     fortnight = request.args.get("fortnight", "")
     search = request.args.get("search", "").strip()
-    params = {
-        "select": "id,full_name,cpf,fortnight,original_filename,storage_path,file_size_bytes,created_at",
-        "order": "created_at.desc",
-        "limit": "500",
-    }
-    if fortnight in {"1", "2"}:
-        params["fortnight"] = f"eq.{fortnight}"
-    if search:
-        clean = search.replace(",", "").replace(".", "")[:80]
-        params["or"] = f"(full_name.ilike.*{clean}*,cpf.ilike.*{digits(clean)}*)"
-    response = requests.get(
-        f"{env('SUPABASE_URL')}/rest/v1/invoices",
-        headers=supabase_headers(), params=params, timeout=30,
-    )
-    if not response.ok:
-        app.logger.error("Falha na listagem: %s", response.text)
-        abort(502, "Não foi possível consultar as notas.")
-    invoices = response.json()
-    return render_template("admin.html", invoices=invoices, fortnight=fortnight, search=search)
+    invoices = fetch_invoices(month=month, fortnight=fortnight, search=search)
+    return render_template("admin.html", invoices=invoices, month=month, fortnight=fortnight, search=search)
 
 
 @app.get("/admin/download/<uuid:invoice_id>")
@@ -263,6 +281,55 @@ def download_invoice(invoice_id):
         pdf.content,
         mimetype="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"},
+    )
+
+
+@app.get("/admin/baixar-quinzena")
+@admin_required
+def download_fortnight():
+    month = request.args.get("month", "").strip()
+    fortnight = request.args.get("fortnight", "")
+    if not valid_month(month) or fortnight not in {"1", "2"}:
+        flash("Selecione o mês e a quinzena para baixar todas as notas.", "error")
+        return redirect(url_for("admin_dashboard", month=month, fortnight=fortnight))
+
+    invoices = fetch_invoices(month=month, fortnight=fortnight, limit="1000")
+    if not invoices:
+        flash("Nenhuma nota encontrada para o mês e quinzena selecionados.", "error")
+        return redirect(url_for("admin_dashboard", month=month, fortnight=fortnight))
+
+    output = io.BytesIO()
+    used_names = set()
+    added = 0
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for item in invoices:
+            pdf = requests.get(
+                f"{env('SUPABASE_URL')}/storage/v1/object/{BUCKET}/{item['storage_path']}",
+                headers=supabase_headers(), timeout=60,
+            )
+            if not pdf.ok:
+                app.logger.error("Falha ao baixar %s para ZIP: %s", item.get("storage_path"), pdf.text)
+                continue
+            base = f"{safe_stem(item['full_name'])}-{secure_filename(item['original_filename']) or 'nota-fiscal.pdf'}"
+            filename = base
+            counter = 2
+            while filename.lower() in used_names:
+                stem, ext = os.path.splitext(base)
+                filename = f"{stem}-{counter}{ext}"
+                counter += 1
+            used_names.add(filename.lower())
+            archive.writestr(filename, pdf.content)
+            added += 1
+
+    if added == 0:
+        abort(502, "As notas foram encontradas, mas os PDFs não puderam ser baixados.")
+
+    output.seek(0)
+    zip_name = f"notas-fiscais-{month}-q{fortnight}.zip"
+    return Response(
+        output.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"', "Cache-Control": "no-store"},
     )
 
 
